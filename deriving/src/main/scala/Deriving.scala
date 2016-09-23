@@ -213,6 +213,8 @@ final class derivingImpl(val c: Context) {
         tree <- reTree(inputs, instance)
       } yield c.Expr[Any](Block(List(c.untypecheck(tree)), Literal(Constant(()))))
 
+// println(result)
+
     result.valueOr { msg =>
       c.error(c.enclosingPosition, msg)
       c.Expr[Any](Block(inputs, Literal(Constant(()))))
@@ -224,16 +226,15 @@ final class derivingImpl(val c: Context) {
     q"${Modifiers(flags(sym))} type ${tsym.name.toTypeName}[..${tsym.typeParams.map(mkTypeDef(_))}]"
   }
 
-  def mkTypTree(tpe: Type): Tree = {
+  def mkTypTree(tpe: Type): Tree =
     tpe match {
       case PolyType(args, tpe1) =>
         tq"({type l[..${args.map(mkTypeDef(_))}] = ${mkTypTree(tpe1)}})#l"
       case TypeRef(NoPrefix, sym, args) =>
         tq"${TypeName(sym.name.decodedName.toString)}[..${args.map(mkTypTree)}]"
       case TypeRef(pre, sym, args) =>
-        tq"${pre.typeSymbol.name.toTermName}.${TypeName(sym.name.decodedName.toString)}[..${args.map(mkTypTree)}]"
+        tq"${pre}#${TypeName(sym.name.decodedName.toString)}[..${args.map(mkTypTree)}]"
     }
-  }
 
   private[this] def reTree(inputs: List[Tree], instance: Tree): DerivationResult[Tree] = {
     def newTrait(name: TypeName, parent: Option[Tree], i: Int) = {
