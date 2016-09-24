@@ -12,5 +12,6 @@ object WobbleT extends WobbleTInstances.Instances
 @deriving[M[_]](Monad[WobbleT[M, ?]])(Monad[M])
 @deriving[M[_]](MonadIO[WobbleT[M, ?]])(MonadIO[M])
 @deriving[M[_]](MonadCatchIO[WobbleT[M, ?]])(MonadCatchIO[M])
+@deriving[M[_]](MonadWrap[WobbleT[M, ?]])(MonadWrap[M])
 object WobbleTInstances
 

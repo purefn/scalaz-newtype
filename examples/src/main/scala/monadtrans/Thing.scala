@@ -12,6 +12,7 @@ object Thing extends ThingInstances.Instances
 @deriving(Monad[Thing])
 @deriving(MonadIO[Thing])
 @deriving(MonadCatchIO[Thing])
+@deriving(MonadWrap[Thing])
 object ThingInstances
 
 object TestThing {

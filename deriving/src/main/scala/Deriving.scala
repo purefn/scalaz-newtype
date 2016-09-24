@@ -332,17 +332,16 @@ final class derivingImpl(val c: Context) {
       val info = m.infoIn(typeClass.tpe)
       val q"$_ def $_[..$tparams](...$_): $_ = $_" = defDef(m, q"???")
       val params = info.paramLists.map(_.map(massageDefParam))
-      val rtype = info.finalResultType
 
       q"""
-        override def $mname[..$tparams](...${params.map(_.map(_._1))}): $rtype =
+        override def $mname[..$tparams](...${params.map(_.map(_._1))}) =
           ${name.toTermName}(${fieldInstance.name}.$mname(...${params.map(_.map(_._2))}))
       """
     }
 
     def massageDefParam(param: Symbol) = {
       val p = valDef(param)
-      val q"$_ val $pname: $_ = $_" = p
+      val q"$pmods val $pname: $ptpt = $pbody" = p
       val ptype = param.typeSignature
       val select =
         if (ptype =:= tpe)
@@ -358,14 +357,15 @@ final class derivingImpl(val c: Context) {
           ptype.typeArgs.lastOption.
             filter(!_.typeArgs.isEmpty).
             map(t => polyType(t.typeArgs.lastOption.map(_.typeSymbol).toList, t)).
-            filter(_.typeConstructor =:= tpe.typeConstructor).
+            filter(_.erasure =:= tpe.erasure).
             map(_ => q"$pname.andThen(_.${field.name})")
-        } else
+        } else {
           ptype.typeArgs.lastOption.
             map(a => polyType(List(a.typeSymbol), ptype)).
-            filter(_.typeConstructor =:= tpe.typeConstructor).
+            filter(_.erasure =:= tpe.erasure).
             map(_ => q"$pname.${field.name}")
-      (p, select.getOrElse(q"$pname"))
+        }
+      (q"$pmods val $pname: ${mkTypTree(param.typeSignature)} = $pbody", select.getOrElse(q"$pname"))
     }
 
     override def toString: String =
