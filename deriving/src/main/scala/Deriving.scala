@@ -167,23 +167,23 @@ final class derivingImpl(val c: Context) {
       q"$tmods type ${name.toTypeName}[_]"
     }
 
-    // because of the way we specify what we're deriving, the type-class name
-    // shows up as a TermName and we need to convert it to a type name
-    // TODO error handling - specifically,
-    //      * if there are no paramerts, was simply `@deriving`
-    //      * something that doesn't look like a type instance, `@deriving(Int)`
-    val instanceTypeTree = {
-      val TypeApply(Ident(n), ps) = tps.head.head
-      tq"${n.toTypeName}[..$ps]"
-    }
-
     val instanceType = {
+      // because of the way we specify what we're deriving, the type-class name
+      // shows up as a TermName and we need to convert it to a type name
+      // TODO error handling - specifically,
+      //      * if there are no paramerts, was simply `@deriving`
+      //      * something that doesn't look like a type instance, `@deriving(Int)`
+      val tpt = {
+        val TypeApply(Ident(n), ps) = tps.head.head
+        tq"${n.toTypeName}[..$ps]"
+      }
+
       // we create a dummy class and use c.typecheck to get the type symbols
-      // for the type-class and the newtype
+      // for the type-class and the newtype.
       val n = TypeName(c.freshName("Dummy"))
       val e = q"""
         abstract class $n {
-          def dummy[..$typeParams]: $instanceTypeTree
+          def dummy[..$typeParams]: $tpt
         }
         7.asInstanceOf[$n]
       """
@@ -231,9 +231,9 @@ final class derivingImpl(val c: Context) {
       case PolyType(args, tpe1) =>
         tq"({type l[..${args.map(mkTypeDef(_))}] = ${mkTypTree(tpe1)}})#l"
       case TypeRef(NoPrefix, sym, args) =>
-        tq"${TypeName(sym.name.decodedName.toString)}[..${args.map(mkTypTree)}]"
+        tq"${sym.name.toTypeName}[..${args.map(mkTypTree)}]"
       case TypeRef(pre, sym, args) =>
-        tq"${pre}#${TypeName(sym.name.decodedName.toString)}[..${args.map(mkTypTree)}]"
+        tq"${pre}#${sym.name.toTypeName}[..${args.map(mkTypTree)}]"
     }
 
   private[this] def reTree(inputs: List[Tree], instance: Tree): DerivationResult[Tree] = {
@@ -446,9 +446,9 @@ final class derivingImpl(val c: Context) {
           val (select, args) =
             tpe match {
               case TypeRef(NoPrefix, sym, args) =>
-                (tq"${TypeName(sym.name.decodedName.toString)}", args)
+                (tq"${sym.name.toTypeName}", args)
               case TypeRef(pre, sym, args) =>
-                (tq"${pre}#${TypeName(sym.name.decodedName.toString)}", args)
+                (tq"${pre}#${sym.name.toTypeName}", args)
             }
           val nargs = (tq"$naliasParam" :: args.reverse.drop(1).map(mkTypTree)).reverse
           tq"$select[..$nargs]"
@@ -469,7 +469,7 @@ final class derivingImpl(val c: Context) {
   object Field {
     def apply(symbol: Symbol, ctpe: Type): Field = {
       val tpe = symbol.typeSignature
-      val name = TermName(symbol.asTerm.name.decodedName.toString)
+      val name = symbol.asTerm.name
       new Field(tpe, name, tpe.typeSymbol.asClass.name, tpe.typeArgs)
     }
 
