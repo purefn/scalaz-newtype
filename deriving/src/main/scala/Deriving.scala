@@ -226,14 +226,21 @@ final class derivingImpl(val c: Context) {
     q"${Modifiers(flags(sym))} type ${tsym.name.toTypeName}[..${tsym.typeParams.map(mkTypeDef(_))}]"
   }
 
+  def mkAppliedType(tpe: Type, f: List[Tree] => List[Tree]): Tree =
+    tpe match {
+      case TypeRef(NoPrefix, sym, args) =>
+        tq"${sym.name.toTypeName}[..${f(args.map(mkTypTree))}]"
+      case TypeRef(pre, sym, args) =>
+        tq"${pre}#${sym.name.toTypeName}[..${f(args.map(mkTypTree))}]"
+    }
+
+
   def mkTypTree(tpe: Type): Tree =
     tpe match {
       case PolyType(args, tpe1) =>
         tq"({type l[..${args.map(mkTypeDef(_))}] = ${mkTypTree(tpe1)}})#l"
-      case TypeRef(NoPrefix, sym, args) =>
-        tq"${sym.name.toTypeName}[..${args.map(mkTypTree)}]"
-      case TypeRef(pre, sym, args) =>
-        tq"${pre}#${sym.name.toTypeName}[..${args.map(mkTypTree)}]"
+      case t: TypeRef =>
+        mkAppliedType(t, identity)
     }
 
   private[this] def reTree(inputs: List[Tree], instance: Tree): DerivationResult[Tree] = {
@@ -442,17 +449,8 @@ final class derivingImpl(val c: Context) {
         // but that's what we're left with for now
         val nalias = TypeName(c.freshName(tpe.typeConstructor.typeSymbol.name.decodedName.toString))
         val naliasParam = TypeName(c.freshName("A"))
-        val talias = {
-          val (select, args) =
-            tpe match {
-              case TypeRef(NoPrefix, sym, args) =>
-                (tq"${sym.name.toTypeName}", args)
-              case TypeRef(pre, sym, args) =>
-                (tq"${pre}#${sym.name.toTypeName}", args)
-            }
-          val nargs = (tq"$naliasParam" :: args.reverse.drop(1).map(mkTypTree)).reverse
-          tq"$select[..$nargs]"
-        }
+        val talias = mkAppliedType(tpe, args => (tq"$naliasParam" :: args.reverse.drop(1)).reverse)
+
         q"""
           val $n: ${typeClass.name}[${mkTypTree(ptpe)}] = {
             type $nalias[$naliasParam] = $talias
