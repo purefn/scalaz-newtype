@@ -427,13 +427,7 @@ final class derivingImpl(val c: Context) {
       if (tpe.typeArgs.isEmpty || tpe.typeArgs.forall(!_.typeSymbol.isParameter))
         q"""val $n = implicitly[${typeClass.name}[${mkTypTree(tpe)}]]"""
       else {
-        val partialTypeParams =
-          tpe.
-            typeArgs.
-            reverse.
-            drop(1).
-            reverse.
-            map(mkTypTree)
+        val ptpe = polyType(tpe.typeArgs.reverse.headOption.toList.map(_.typeSymbol), tpe)
 
         // we create a type alias to help scala with inference in some cases,
         // e.g monad transformer stacks. this stinks because it means implicit
@@ -448,9 +442,20 @@ final class derivingImpl(val c: Context) {
         // but that's what we're left with for now
         val nalias = TypeName(c.freshName(tpe.typeConstructor.typeSymbol.name.decodedName.toString))
         val naliasParam = TypeName(c.freshName("A"))
+        val talias = {
+          val (select, args) =
+            tpe match {
+              case TypeRef(NoPrefix, sym, args) =>
+                (tq"${TypeName(sym.name.decodedName.toString)}", args)
+              case TypeRef(pre, sym, args) =>
+                (tq"${pre}#${TypeName(sym.name.decodedName.toString)}", args)
+            }
+          val nargs = (tq"$naliasParam" :: args.reverse.drop(1).map(mkTypTree)).reverse
+          tq"$select[..$nargs]"
+        }
         q"""
-          val $n: ${typeClass.name}[({type l[a] = ${tpe.typeConstructor.typeSymbol.name.toTypeName}[..$partialTypeParams, a]})#l] = {
-            type $nalias[$naliasParam] = ${tpe.typeConstructor.typeSymbol.name.toTypeName}[..$partialTypeParams, $naliasParam]
+          val $n: ${typeClass.name}[${mkTypTree(ptpe)}] = {
+            type $nalias[$naliasParam] = $talias
             implicitly[${typeClass.name}[$nalias]]
           }
         """
