@@ -41,8 +41,8 @@ lazy val examples =
       , scalacOptions += "-Xprint:typer"
       , libraryDependencies ++=
           (List
-            ( "org.scalaz" %% "scalaz-core" % "7.1.4"
-            , "org.scalaz" %% "scalaz-effect" % "7.1.4"
+            ( "org.scalaz" %% "scalaz-core" % "7.2.5"
+            , "org.scalaz" %% "scalaz-effect" % "7.2.5"
             )
           )
       , addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.6.3")

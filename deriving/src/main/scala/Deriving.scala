@@ -213,7 +213,7 @@ final class derivingImpl(val c: Context) {
         tree <- reTree(inputs, instance)
       } yield c.Expr[Any](Block(List(c.untypecheck(tree)), Literal(Constant(()))))
 
-// println(result)
+println(result)
 
     result.valueOr { msg =>
       c.error(c.enclosingPosition, msg)
@@ -293,6 +293,9 @@ final class derivingImpl(val c: Context) {
 
   object TypeClass {
     def apply(tpe: Type): TypeClass = {
+      val name = tpe match {
+        case TypeRef(_, sym, _) => sym.name.toTypeName
+      }
       val classSymbol: ClassSymbol = tpe.typeSymbol.asClass
       val abstractMethods: List[MethodSymbol] =
         tpe.members.
@@ -301,17 +304,17 @@ final class derivingImpl(val c: Context) {
           filter(_.isAbstract).
           toList
 
-      new TypeClass(tpe, classSymbol.name, classSymbol.typeParams, abstractMethods)
+      new TypeClass(tpe, name, classSymbol.typeParams, abstractMethods)
     }
   }
 
-  final class Newtype(tpe: Type, field: Field) {
+  final class Newtype(val tpe: Type, field: Field) {
     val symbol = tpe.typeSymbol.asClass
     val name = symbol.name
     val typeParams = symbol.typeParams
 
     def derive(typeParams: List[TypeDef], contextBounds: List[ValDef], typeClass: TypeClass): Tree = {
-      val fieldInstance = field.instanceDef(typeClass)
+      val fieldInstance = field.instanceDef(this, typeClass)
       val defs = typeClass.abstractMethods.map(deriveDef(typeClass, fieldInstance, _))
 
       val iname = TermName(name.decodedName.toString + typeClass.name.decodedName.toString)
@@ -428,12 +431,18 @@ final class derivingImpl(val c: Context) {
     //   List(q"val ${TermName(c.freshName("ev"))}: $instanceType")
     // }
 
-    def instanceDef(typeClass: TypeClass): ValDef = {
+    def instanceDef(newtype: Newtype, typeClass: TypeClass): ValDef = {
       val n = TermName(c.freshName(typeName.decodedName.toString + typeClass.name.decodedName.toString))
 
-      if (tpe.typeArgs.isEmpty || tpe.typeArgs.forall(!_.typeSymbol.isParameter))
-        q"""val $n = implicitly[${typeClass.name}[${mkTypTree(tpe)}]]"""
-      else {
+      if (tpe.typeArgs.isEmpty || tpe.typeArgs.forall(!_.typeSymbol.isParameter)) {
+        val tcArgs =
+          typeClass.tpe.typeArgs.map { ta =>
+            if (ta =:= newtype.tpe) mkTypTree(tpe)
+            else mkTypTree(ta)
+          }
+
+        q"""val $n = implicitly[${typeClass.name}[..$tcArgs]]"""
+      } else {
         val ptpe = polyType(tpe.typeArgs.reverse.headOption.toList.map(_.typeSymbol), tpe)
 
         // we create a type alias to help scala with inference in some cases,
@@ -451,10 +460,19 @@ final class derivingImpl(val c: Context) {
         val naliasParam = TypeName(c.freshName("A"))
         val talias = mkAppliedType(tpe, args => (tq"$naliasParam" :: args.reverse.drop(1)).reverse)
 
+        val tcArgs =
+          typeClass.tpe.typeArgs.map { ta =>
+            if (ta =:= newtype.tpe) (mkTypTree(ptpe), tq"$nalias")
+            else {
+              val tree = mkTypTree(ta)
+              (tree, tree)
+            }
+          }
+
         q"""
-          val $n: ${typeClass.name}[${mkTypTree(ptpe)}] = {
+          val $n: ${typeClass.name}[..${tcArgs.map(_._1)}] = {
             type $nalias[$naliasParam] = $talias
-            implicitly[${typeClass.name}[$nalias]]
+            implicitly[${typeClass.name}[..${tcArgs.map(_._2)}]]
           }
         """
       }
